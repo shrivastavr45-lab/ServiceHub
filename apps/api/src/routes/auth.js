@@ -14,9 +14,10 @@ const COOKIE = 'sh_refresh';
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 const cookieOpts = () => ({
-  httpOnly: true, secure: isProd, sameSite: 'lax', path: '/api/auth',
+  httpOnly: true, secure: isProd, sameSite: isProd ? 'none' : 'lax', path: '/api/auth',
   maxAge: config.REFRESH_TOKEN_TTL_DAYS * 86400 * 1000,
 });
+const clearOpts = () => { const { maxAge, ...rest } = cookieOpts(); return rest; };
 
 async function issueRefresh(client, userId, familyId = crypto.randomUUID()) {
   const token = crypto.randomBytes(48).toString('base64url');
@@ -95,7 +96,7 @@ router.post('/refresh', async (req, res) => {
     return { user: u, refresh: await issueRefresh(c, u.id, rt.family_id) };
   });
   if (outcome.error) {
-    res.clearCookie(COOKIE, { path: '/api/auth' });
+    res.clearCookie(COOKIE, clearOpts());
     throw unauthorized('Session expired, please log in again');
   }
   res.cookie(COOKIE, outcome.refresh, cookieOpts());
@@ -105,7 +106,7 @@ router.post('/refresh', async (req, res) => {
 router.post('/logout', async (req, res) => {
   const token = req.cookies?.[COOKIE];
   if (token) await query('UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL', [sha256(token)]);
-  res.clearCookie(COOKIE, { path: '/api/auth' });
+  res.clearCookie(COOKIE, clearOpts());
   res.status(204).end();
 });
 
